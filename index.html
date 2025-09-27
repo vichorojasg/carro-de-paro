@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Checklist Carro de Paro - iOS Minimal</title>
+  <title>Checklist Carro de Paro 🚑</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-50 text-gray-900 font-sans">
@@ -41,7 +41,7 @@
     </div>
 
     <!-- Botón Guardar -->
-    <button onclick="guardar()" class="w-full bg-gray-900 hover:bg-gray-800 text-white font-medium py-3 rounded-3xl transition">Guardar Chequeo</button>
+    <button id="guardarBtn" class="w-full bg-gray-900 hover:bg-gray-800 text-white font-medium py-3 rounded-3xl transition">Guardar Chequeo</button>
 
     <!-- Resultados -->
     <div id="resultado" class="mt-6 space-y-3"></div>
@@ -51,131 +51,167 @@
   </div>
 
   <script>
-    const ENDPOINT = "https://script.google.com/macros/s/AKfycbx3EbqZs66jFKPxiC4nMRWZSTGTaXFMZ8Co0PFNZvPaYIMq7pTQUthSkjAm0hIpRXU/exec";
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwhOvzUAUxr8SwdexIwurg_18J0yyab-4oXy2gMkVJ-du1EjUclmH8zDvC9A5ZJDAEj/exec";
 
-    // Ítems del carro (sin cambios)
-    const categorias = {
-      "Equipamiento Crítico Superior: Monitorización y Desfibrilación": [
-        { nombre: "Monitor desfibrilador", recomendado: 1 },
-        { nombre: "Paletas/adaptadores", recomendado: 2 },
-        { nombre: "Tabla rígida de RCP", recomendado: 1 },
-        { nombre: "Balón de oxígeno portátil con manómetro y humidificador", recomendado: 1 },
-        { nombre: "Gel conductor y electrodos desechables", recomendado: 1 }
-      ],
-      "Manejo de vía aérea": [
-        { nombre: "Ambú adulto y pediátrico", recomendado: 2 },
-        { nombre: "Cánulas orofaríngeas y nasofaríngeas de diversos tamaños", recomendado: 1 },
-        { nombre: "Laringoscopios con valvas rectas y curvas", recomendado: 2 },
-        { nombre: "Tubos endotraqueales Nº6.0 a Nº8.5", recomendado: 5 },
-        { nombre: "Estiletes o mandriles", recomendado: 5 },
-        { nombre: "Dispositivos supraglóticos (mascarillas laríngeas N°3-4)", recomendado: 2 },
-        { nombre: "Kit básico para cricotirotomía", recomendado: 1 }
-      ],
-      "Farmacología esencial en carro de paro": [
-        { nombre: "Adrenalina 1mg/ml", recomendado: 5 },
-        { nombre: "Amiodarona 50mg/ml", recomendado: 3 },
-        { nombre: "Atropina 1mg/ml", recomendado: 2 },
-        { nombre: "Lidocaína", recomendado: 2 },
-        { nombre: "Adenosina", recomendado: 2 },
-        { nombre: "Bicarbonato de sodio 8%", recomendado: 2 },
-        { nombre: "Gluconato de calcio 10%", recomendado: 2 },
-        { nombre: "Sulfato de magnesio 25%", recomendado: 2 },
-        { nombre: "Midazolam 15mg/3ml", recomendado: 2 },
-        { nombre: "Soluciones IV/Cristaloides (SF 0.9%, Ringer Lactato)", recomendado: 3 },
-        { nombre: "Glucosa 50%", recomendado: 2 }
-      ],
-      "Vías de Acceso": [
-        { nombre: "Catéteres venosos periféricos 14G-24G", recomendado: 5 },
-        { nombre: "Equipos de venoclisis (macro y microgoteros)", recomendado: 2 },
-        { nombre: "Llaves de tres vías y sets de extensión", recomendado: 2 }
-      ],
-      "Equipos Adicionales": [
-        { nombre: "Monitor de glucosa (Dextrostix)", recomendado: 1 },
-        { nombre: "Bomba de infusión continua", recomendado: 1 },
-        { nombre: "Equipos para aspiración de secreciones", recomendado: 2 }
-      ]
-    };
+    let categorias = {};
+    let servicios = [];
+    let historialPorServicio = {};
 
-    // Mostrar categorías
     const contenedor = document.getElementById("categorias");
-    for (let cat in categorias) {
-      const div = document.createElement("div");
-      div.className = "bg-white p-5 rounded-3xl shadow-md mb-4";
-      div.innerHTML = `<h2 class='text-base font-medium mb-4 text-gray-800'>${cat}</h2>`;
-      categorias[cat].forEach((item, index) => {
-        div.innerHTML += `
-          <div class='flex items-center mb-3'>
-            <span class='w-2/3 text-gray-700'>${item.nombre}</span>
-            <input type='number' min='0' id='${cat}-${index}' class='w-1/3 p-2 border border-gray-200 rounded-2xl focus:outline-none focus:ring-1 focus:ring-gray-300' placeholder='Cantidad' />
-          </div>
-        `;
-      });
-      contenedor.appendChild(div);
-    }
+    const selectServicio = document.getElementById("servicio");
 
     // Fecha automática
     document.getElementById("fecha-auto").value = new Date().toLocaleString();
-    const selectServicio = document.getElementById('servicio');
-
-    // Cargar servicios desde Google Sheet
+    // Cargar solo servicios primero
     async function cargarServicios() {
       try {
-        const resp = await fetch(`${ENDPOINT}?sheet=servicios`);
-        const data = await resp.json();
-        renderServicios(data);
-      } catch (err) {
-        console.error("Error cargando servicios:", err);
+        const res = await fetch(SCRIPT_URL);
+        const data = await res.json();
+        servicios = data.servicios || [];
+        renderServicios();
+        cargarCategoriasYHistorial(data); // cargar lo demás en segundo plano
+      } catch (error) {
+        console.error("Error cargando servicios:", error);
       }
     }
 
-    function renderServicios(servicios) {
+    function renderServicios() {
       selectServicio.innerHTML = '<option value="">Seleccione un servicio</option>';
       servicios.forEach(s => {
-        const option = document.createElement('option');
+        const option = document.createElement("option");
         option.value = s;
         option.textContent = s;
         selectServicio.appendChild(option);
       });
     }
 
-    // Agregar nuevo servicio y guardar en Sheet
-    document.getElementById('agregarServicioBtn').addEventListener('click', async () => {
-      const nuevo = prompt('Ingrese el nombre del nuevo servicio:');
-      if (nuevo) {
+    function cargarCategoriasYHistorial(data) {
+      // Categorías
+      categorias = {};
+      data.items.forEach(item => {
+        if (!categorias[item.categoria]) categorias[item.categoria] = [];
+        categorias[item.categoria].push({ nombre: item.nombre, recomendado: parseInt(item.recomendado) });
+      });
+      renderCategorias();
+
+      // Historial
+      historialPorServicio = {};
+      data.historial.forEach(h => {
+        if (!historialPorServicio[h.servicio]) historialPorServicio[h.servicio] = [];
+        historialPorServicio[h.servicio].push({
+          fecha: h.fecha,
+          servicio: h.servicio,
+          responsable: h.responsable,
+          porcentaje: parseInt(h.porcentaje),
+          faltantes: h.faltantes.split(", ").filter(f => f),
+          observaciones: h.observaciones
+        });
+      });
+    }
+
+    function renderCategorias() {
+      contenedor.innerHTML = "";
+      for (let cat in categorias) {
+        const div = document.createElement("div");
+        div.className = "bg-white p-5 rounded-3xl shadow-md mb-4";
+        div.innerHTML = `<h2 class='text-base font-medium mb-4 text-gray-800'>${cat}</h2>`;
+        categorias[cat].forEach((item, index) => {
+          div.innerHTML += `
+            <div class='flex items-center mb-3'>
+              <span class='w-2/3 text-gray-700'>${item.nombre}</span>
+              <input type='number' min='0' id='${cat}-${index}' class='w-1/3 p-2 border border-gray-200 rounded-2xl focus:outline-none focus:ring-1 focus:ring-gray-300' placeholder='Cantidad' />
+            </div>
+          `;
+        });
+        contenedor.appendChild(div);
+      }
+    }
+
+    // Agregar nuevo servicio
+    document.getElementById("agregarServicioBtn").addEventListener("click", async () => {
+      const nuevo = prompt("Ingrese el nombre del nuevo servicio:");
+      if (nuevo && !servicios.includes(nuevo)) {
         try {
-          await fetch(`${ENDPOINT}?sheet=servicios&accion=agregar&valor=${encodeURIComponent(nuevo)}`);
-          alert("Servicio agregado correctamente.");
-          cargarServicios();
+          const resp = await fetch(SCRIPT_URL, {
+            method: "POST",
+            body: JSON.stringify({ servicio: nuevo, fecha: new Date().toLocaleString(), responsable: "", porcentaje: 0, faltantes: [], observaciones: "" })
+          });
+          const result = await resp.json();
+          if (result.status === "ok") {
+            servicios.push(nuevo);
+            renderServicios();
+          }
         } catch (err) {
           console.error("Error agregando servicio:", err);
         }
       }
     });
 
-    // Historial por servicio desde Google Sheet
-    async function cargarHistorial(servicio) {
-      try {
-        const resp = await fetch(`${ENDPOINT}?sheet=historial`);
-        const data = await resp.json();
-        const filtrado = data.filter(h => h.servicio === servicio);
-        renderHistorial(filtrado);
-      } catch (err) {
-        console.error("Error cargando historial:", err);
+    // Guardar chequeo
+    document.getElementById("guardarBtn").addEventListener("click", async () => {
+      const servicio = selectServicio.value;
+      if (!servicio) return alert("Seleccione un servicio");
+
+      const responsable = document.getElementById("responsable").value;
+      const fechaAuto = document.getElementById("fecha-auto").value;
+      const observaciones = document.getElementById("observaciones").value;
+
+      let faltantes = [], total = 0, completos = 0;
+      for (let cat in categorias) {
+        categorias[cat].forEach((item, index) => {
+          const valor = parseInt(document.getElementById(`${cat}-${index}`).value) || 0;
+          total++;
+          if (valor >= item.recomendado) completos++;
+          else faltantes.push(item.nombre);
+        });
       }
+
+      const porcentaje = Math.round((completos / total) * 100);
+
+      // Guardar en Google Sheet
+      try {
+        await fetch(SCRIPT_URL, {
+          method: "POST",
+          body: JSON.stringify({ servicio, responsable, fecha: fechaAuto, porcentaje, faltantes, observaciones })
+        });
+      } catch (err) {
+        console.error("Error guardando historial:", err);
+      }
+
+      renderResultado(servicio, responsable, fechaAuto, observaciones, porcentaje, faltantes);
+      renderHistorial(servicio);
+    });
+
+    function renderResultado(servicio, responsable, fechaAuto, observaciones, porcentaje, faltantes) {
+      const color = porcentaje === 100 ? "bg-green-400" : porcentaje >= 70 ? "bg-yellow-300" : "bg-red-400";
+      document.getElementById("resultado").innerHTML = `
+        <div class='bg-white p-5 rounded-3xl shadow-md space-y-3'>
+          <h3 class='font-medium text-lg text-gray-800 mb-2'>Resultado del Chequeo</h3>
+          <p><strong>Servicio:</strong> ${servicio}</p>
+          <p><strong>Responsable:</strong> ${responsable}</p>
+          <p><strong>Fecha:</strong> ${fechaAuto}</p>
+          <p><strong>Observaciones:</strong> ${observaciones || "Ninguna"}</p>
+          <div class='p-4 rounded-2xl text-white font-semibold text-center ${color}'>${porcentaje}% completado</div>
+          <div>
+            <h4 class='font-medium mt-4 text-gray-800'>Ítems Críticos</h4>
+            <ul class='list-disc ml-6 text-gray-700'>${faltantes.length ? faltantes.map(f => `<li>${f}</li>`).join("") : "<li>Ninguno</li>"}</ul>
+          </div>
+        </div>
+      `;
     }
 
-    function renderHistorial(historial) {
+    function renderHistorial(servicio) {
       const histDiv = document.getElementById("historial");
       histDiv.innerHTML = "<h3 class='text-lg font-medium text-gray-800 mb-4'>Historial de Chequeos</h3>";
-      if (historial.length > 0) {
-        historial.forEach(h => {
-          let color = h.porcentaje == 100 ? "bg-green-400" : h.porcentaje >= 70 ? "bg-yellow-300" : "bg-red-400";
+      if (historialPorServicio[servicio]) {
+        historialPorServicio[servicio].forEach(h => {
+          const color = h.porcentaje === 100 ? "bg-green-400" : h.porcentaje >= 70 ? "bg-yellow-300" : "bg-red-400";
           histDiv.innerHTML += `
             <div class='bg-white p-4 rounded-3xl shadow-md flex justify-between items-center'>
               <div>
                 <p class='text-sm text-gray-500'>${h.fecha}</p>
                 <p class='text-gray-700'>${h.servicio} - ${h.responsable}</p>
-                <p class='text-gray-700 text-sm'>Observaciones: ${h.observaciones || 'Ninguna'}</p>
+                <p class='text-gray-700 text-sm'>Observaciones: ${h.observaciones || "Ninguna"}</p>
               </div>
               <div class='px-4 py-2 rounded-2xl text-white font-medium ${color}'>${h.porcentaje}%</div>
             </div>
@@ -186,41 +222,11 @@
       }
     }
 
-    selectServicio.addEventListener("change", (e) => {
+    selectServicio.addEventListener("change", e => {
       const servicio = e.target.value;
-      if (servicio) cargarHistorial(servicio);
+      if (servicio) renderHistorial(servicio);
       else document.getElementById("historial").innerHTML = "";
     });
-
-    // Guardar chequeo en Google Sheet
-    async function guardar() {
-      const servicio = selectServicio.value;
-      if (!servicio) { alert("Seleccione un servicio"); return; }
-      const responsable = document.getElementById("responsable").value;
-      const fechaAuto = document.getElementById("fecha-auto").value;
-      const observaciones = document.getElementById("observaciones").value;
-
-      let faltantes = [], total = 0, completos = 0;
-      for (let cat in categorias) {
-        categorias[cat].forEach((item, index) => {
-          const valor = parseInt(document.getElementById(`${cat}-${index}`).value) || 0;
-          total++;
-          if (valor >= item.recomendado) completos++; else faltantes.push(item.nombre);
-        });
-      }
-
-      const porcentaje = Math.round((completos / total) * 100);
-
-      try {
-        await fetch(`${ENDPOINT}?sheet=historial&accion=agregar&valor=${encodeURIComponent(JSON.stringify({
-          servicio, responsable, fecha: fechaAuto, porcentaje, faltantes, observaciones
-        }))}`);
-        alert("Chequeo guardado correctamente.");
-        cargarHistorial(servicio);
-      } catch (err) {
-        console.error("Error guardando historial:", err);
-      }
-    }
 
     // Inicializar
     cargarServicios();
