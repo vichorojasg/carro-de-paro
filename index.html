@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Checklist Carro de Paro 🚑</title>
+  <title>Checklist Carro de Paro - iOS Minimal</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-50 text-gray-900 font-sans">
@@ -51,32 +51,19 @@
   </div>
 
   <script>
-    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwhOvzUAUxr8SwdexIwurg_18J0yyab-4oXy2gMkVJ-du1EjUclmH8zDvC9A5ZJDAEj/exec";
+    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbx3EbqZs66jFKPxiC4nMRWZSTGTaXFMZ8Co0PFNZvPaYIMq7pTQUthSkjAm0hIpRXU/exec";
 
     let categorias = {};
     let servicios = [];
     let historialPorServicio = {};
 
-    const contenedor = document.getElementById("categorias");
-    const selectServicio = document.getElementById("servicio");
-
     // Fecha automática
     document.getElementById("fecha-auto").value = new Date().toLocaleString();
-    // Cargar solo servicios primero
-    async function cargarServicios() {
-      try {
-        const res = await fetch(SCRIPT_URL);
-        const data = await res.json();
-        servicios = data.servicios || [];
-        renderServicios();
-        cargarCategoriasYHistorial(data); // cargar lo demás en segundo plano
-      } catch (error) {
-        console.error("Error cargando servicios:", error);
-      }
-    }
 
+    // Función para renderizar servicios
     function renderServicios() {
-      selectServicio.innerHTML = '<option value="">Seleccione un servicio</option>';
+      const selectServicio = document.getElementById("servicio");
+      selectServicio.innerHTML = "<option value=''>Seleccione un servicio</option>";
       servicios.forEach(s => {
         const option = document.createElement("option");
         option.value = s;
@@ -85,31 +72,9 @@
       });
     }
 
-    function cargarCategoriasYHistorial(data) {
-      // Categorías
-      categorias = {};
-      data.items.forEach(item => {
-        if (!categorias[item.categoria]) categorias[item.categoria] = [];
-        categorias[item.categoria].push({ nombre: item.nombre, recomendado: parseInt(item.recomendado) });
-      });
-      renderCategorias();
-
-      // Historial
-      historialPorServicio = {};
-      data.historial.forEach(h => {
-        if (!historialPorServicio[h.servicio]) historialPorServicio[h.servicio] = [];
-        historialPorServicio[h.servicio].push({
-          fecha: h.fecha,
-          servicio: h.servicio,
-          responsable: h.responsable,
-          porcentaje: parseInt(h.porcentaje),
-          faltantes: h.faltantes.split(", ").filter(f => f),
-          observaciones: h.observaciones
-        });
-      });
-    }
-
+    // Función para renderizar categorías y items
     function renderCategorias() {
+      const contenedor = document.getElementById("categorias");
       contenedor.innerHTML = "";
       for (let cat in categorias) {
         const div = document.createElement("div");
@@ -127,91 +92,19 @@
       }
     }
 
-    // Agregar nuevo servicio
-    document.getElementById("agregarServicioBtn").addEventListener("click", async () => {
-      const nuevo = prompt("Ingrese el nombre del nuevo servicio:");
-      if (nuevo && !servicios.includes(nuevo)) {
-        try {
-          const resp = await fetch(SCRIPT_URL, {
-            method: "POST",
-            body: JSON.stringify({ servicio: nuevo, fecha: new Date().toLocaleString(), responsable: "", porcentaje: 0, faltantes: [], observaciones: "" })
-          });
-          const result = await resp.json();
-          if (result.status === "ok") {
-            servicios.push(nuevo);
-            renderServicios();
-          }
-        } catch (err) {
-          console.error("Error agregando servicio:", err);
-        }
-      }
-    });
-
-    // Guardar chequeo
-    document.getElementById("guardarBtn").addEventListener("click", async () => {
-      const servicio = selectServicio.value;
-      if (!servicio) return alert("Seleccione un servicio");
-
-      const responsable = document.getElementById("responsable").value;
-      const fechaAuto = document.getElementById("fecha-auto").value;
-      const observaciones = document.getElementById("observaciones").value;
-
-      let faltantes = [], total = 0, completos = 0;
-      for (let cat in categorias) {
-        categorias[cat].forEach((item, index) => {
-          const valor = parseInt(document.getElementById(`${cat}-${index}`).value) || 0;
-          total++;
-          if (valor >= item.recomendado) completos++;
-          else faltantes.push(item.nombre);
-        });
-      }
-
-      const porcentaje = Math.round((completos / total) * 100);
-
-      // Guardar en Google Sheet
-      try {
-        await fetch(SCRIPT_URL, {
-          method: "POST",
-          body: JSON.stringify({ servicio, responsable, fecha: fechaAuto, porcentaje, faltantes, observaciones })
-        });
-      } catch (err) {
-        console.error("Error guardando historial:", err);
-      }
-
-      renderResultado(servicio, responsable, fechaAuto, observaciones, porcentaje, faltantes);
-      renderHistorial(servicio);
-    });
-
-    function renderResultado(servicio, responsable, fechaAuto, observaciones, porcentaje, faltantes) {
-      const color = porcentaje === 100 ? "bg-green-400" : porcentaje >= 70 ? "bg-yellow-300" : "bg-red-400";
-      document.getElementById("resultado").innerHTML = `
-        <div class='bg-white p-5 rounded-3xl shadow-md space-y-3'>
-          <h3 class='font-medium text-lg text-gray-800 mb-2'>Resultado del Chequeo</h3>
-          <p><strong>Servicio:</strong> ${servicio}</p>
-          <p><strong>Responsable:</strong> ${responsable}</p>
-          <p><strong>Fecha:</strong> ${fechaAuto}</p>
-          <p><strong>Observaciones:</strong> ${observaciones || "Ninguna"}</p>
-          <div class='p-4 rounded-2xl text-white font-semibold text-center ${color}'>${porcentaje}% completado</div>
-          <div>
-            <h4 class='font-medium mt-4 text-gray-800'>Ítems Críticos</h4>
-            <ul class='list-disc ml-6 text-gray-700'>${faltantes.length ? faltantes.map(f => `<li>${f}</li>`).join("") : "<li>Ninguno</li>"}</ul>
-          </div>
-        </div>
-      `;
-    }
-
+    // Función para renderizar historial
     function renderHistorial(servicio) {
       const histDiv = document.getElementById("historial");
       histDiv.innerHTML = "<h3 class='text-lg font-medium text-gray-800 mb-4'>Historial de Chequeos</h3>";
       if (historialPorServicio[servicio]) {
         historialPorServicio[servicio].forEach(h => {
-          const color = h.porcentaje === 100 ? "bg-green-400" : h.porcentaje >= 70 ? "bg-yellow-300" : "bg-red-400";
+          let color = h.porcentaje === 100 ? "bg-green-400" : h.porcentaje >= 70 ? "bg-yellow-300" : "bg-red-400";
           histDiv.innerHTML += `
             <div class='bg-white p-4 rounded-3xl shadow-md flex justify-between items-center'>
               <div>
                 <p class='text-sm text-gray-500'>${h.fecha}</p>
                 <p class='text-gray-700'>${h.servicio} - ${h.responsable}</p>
-                <p class='text-gray-700 text-sm'>Observaciones: ${h.observaciones || "Ninguna"}</p>
+                <p class='text-gray-700 text-sm'>Observaciones: ${h.observaciones || 'Ninguna'}</p>
               </div>
               <div class='px-4 py-2 rounded-2xl text-white font-medium ${color}'>${h.porcentaje}%</div>
             </div>
@@ -222,14 +115,125 @@
       }
     }
 
-    selectServicio.addEventListener("change", e => {
+    // Fetch inicial desde Google Sheets
+    async function cargarDatos() {
+      try {
+        const res = await fetch(WEB_APP_URL);
+        const data = await res.json();
+        categorias = {};
+        data.items.forEach(i => {
+          if (!categorias[i.categoria]) categorias[i.categoria] = [];
+          categorias[i.categoria].push({nombre: i.nombre, recomendado: parseInt(i.recomendado)});
+        });
+        servicios = data.servicios;
+        historialPorServicio = {};
+        data.historial.forEach(h => {
+          if (!historialPorServicio[h.servicio]) historialPorServicio[h.servicio] = [];
+          historialPorServicio[h.servicio].push({
+            fecha: h.fecha,
+            servicio: h.servicio,
+            responsable: h.responsable,
+            porcentaje: h.porcentaje,
+            faltantes: h.faltantes.split(",").map(x=>x.trim()),
+            observaciones: h.observaciones
+          });
+        });
+        renderServicios();
+        renderCategorias();
+      } catch(err) {
+        console.error("Error cargando datos:", err);
+      }
+    }
+
+    cargarDatos();
+
+    // Cambios de servicio
+    document.getElementById("servicio").addEventListener("change", e => {
       const servicio = e.target.value;
       if (servicio) renderHistorial(servicio);
       else document.getElementById("historial").innerHTML = "";
     });
 
-    // Inicializar
-    cargarServicios();
+    // Agregar servicio
+    document.getElementById("agregarServicioBtn").addEventListener("click", async () => {
+      const nuevo = prompt("Ingrese el nombre del nuevo servicio:");
+      if (nuevo && !servicios.includes(nuevo)) {
+        try {
+          await fetch(WEB_APP_URL, {
+            method: "POST",
+            body: JSON.stringify({
+              servicio: nuevo,
+              responsable: "",
+              fecha: new Date().toLocaleString(),
+              porcentaje: 0,
+              faltantes: [],
+              observaciones: ""
+            })
+          });
+          alert("Servicio agregado correctamente. Recargue la página.");
+        } catch(err) {
+          console.error(err);
+          alert("Error agregando servicio.");    // Guardar chequeo
+    async function guardar() {
+      const servicio = selectServicio.value;
+      if (!servicio) { alert("Seleccione un servicio"); return; }
+      const responsable = document.getElementById("responsable").value;
+      const fechaAuto = document.getElementById("fecha-auto").value;
+      const observaciones = document.getElementById("observaciones").value;
+
+      let faltantes = [], total = 0, completos = 0;
+      for (let cat in categorias) {
+        categorias[cat].forEach((item, index) => {
+          const valor = parseInt(document.getElementById(`${cat}-${index}`).value) || 0;
+          total++;
+          if (valor >= item.recomendado) completos++; else faltantes.push(item.nombre);
+        });
+      }
+
+      let porcentaje = Math.round((completos / total) * 100);
+
+      let color = "bg-green-400";
+      if (faltantes.length > 0 && faltantes.length <= total / 2) color = "bg-yellow-300";
+      if (faltantes.length > total / 2) color = "bg-red-400";
+
+      // Mostrar resultado
+      let html = `<div class='bg-white p-5 rounded-3xl shadow-md space-y-3'>
+        <h3 class='font-medium text-lg text-gray-800 mb-2'>Resultado del Chequeo</h3>
+        <p><strong>Servicio:</strong> ${servicio}</p>
+        <p><strong>Responsable:</strong> ${responsable}</p>
+        <p><strong>Fecha:</strong> ${fechaAuto}</p>
+        <p><strong>Observaciones:</strong> ${observaciones || 'Ninguna'}</p>
+        <div class='p-4 rounded-2xl text-white font-semibold text-center ${color}'>${porcentaje}% completado</div>
+        <div>
+          <h4 class='font-medium mt-4 text-gray-800'>Ítems Críticos</h4>
+          <ul class='list-disc ml-6 text-gray-700'>${faltantes.map(f => `<li>${f}</li>`).join("") || "<li>Ninguno</li>"}</ul>
+        </div>
+      </div>`;
+      document.getElementById("resultado").innerHTML = html;
+
+      // Guardar en Google Sheets
+      try {
+        const res = await fetch(WEB_APP_URL, {
+          method: "POST",
+          body: JSON.stringify({ servicio, responsable, fecha: fechaAuto, faltantes, porcentaje, observaciones }),
+          headers: { "Content-Type": "application/json" }
+        });
+        const data = await res.json();
+        if (data.status === "ok") {
+          alert("Chequeo guardado correctamente en la nube");
+          cargarServicios(); // recarga servicios y historial
+        } else {
+          alert("Error guardando en la nube");
+        }
+      } catch (err) {
+        console.error("Error guardando:", err);
+        alert("Error guardando en la nube");
+      }
+    }
   </script>
 </body>
 </html>
+
+        }
+      }
+    });
