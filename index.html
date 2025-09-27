@@ -51,161 +51,125 @@
   </div>
 
   <script>
-    const endpoint = "https://script.google.com/macros/s/AKfycbwhOvzUAUxr8SwdexIwurg_18J0yyab-4oXy2gMkVJ-du1EjUclmH8zDvC9A5ZJDAEj/exec";
+    const ENDPOINT = "https://script.google.com/macros/s/AKfycbwhOvzUAUxr8SwdexIwurg_18J0yyab-4oXy2gMkVJ-du1EjUclmH8zDvC9A5ZJDAEj/exec";
 
-    let categorias = {};
-    let servicios = [];
-    let historialPorServicio = {};
+    // Ítems del carro (sin cambios)
+    const categorias = {
+      "Equipamiento Crítico Superior: Monitorización y Desfibrilación": [
+        { nombre: "Monitor desfibrilador", recomendado: 1 },
+        { nombre: "Paletas/adaptadores", recomendado: 2 },
+        { nombre: "Tabla rígida de RCP", recomendado: 1 },
+        { nombre: "Balón de oxígeno portátil con manómetro y humidificador", recomendado: 1 },
+        { nombre: "Gel conductor y electrodos desechables", recomendado: 1 }
+      ],
+      "Manejo de vía aérea": [
+        { nombre: "Ambú adulto y pediátrico", recomendado: 2 },
+        { nombre: "Cánulas orofaríngeas y nasofaríngeas de diversos tamaños", recomendado: 1 },
+        { nombre: "Laringoscopios con valvas rectas y curvas", recomendado: 2 },
+        { nombre: "Tubos endotraqueales Nº6.0 a Nº8.5", recomendado: 5 },
+        { nombre: "Estiletes o mandriles", recomendado: 5 },
+        { nombre: "Dispositivos supraglóticos (mascarillas laríngeas N°3-4)", recomendado: 2 },
+        { nombre: "Kit básico para cricotirotomía", recomendado: 1 }
+      ],
+      "Farmacología esencial en carro de paro": [
+        { nombre: "Adrenalina 1mg/ml", recomendado: 5 },
+        { nombre: "Amiodarona 50mg/ml", recomendado: 3 },
+        { nombre: "Atropina 1mg/ml", recomendado: 2 },
+        { nombre: "Lidocaína", recomendado: 2 },
+        { nombre: "Adenosina", recomendado: 2 },
+        { nombre: "Bicarbonato de sodio 8%", recomendado: 2 },
+        { nombre: "Gluconato de calcio 10%", recomendado: 2 },
+        { nombre: "Sulfato de magnesio 25%", recomendado: 2 },
+        { nombre: "Midazolam 15mg/3ml", recomendado: 2 },
+        { nombre: "Soluciones IV/Cristaloides (SF 0.9%, Ringer Lactato)", recomendado: 3 },
+        { nombre: "Glucosa 50%", recomendado: 2 }
+      ],
+      "Vías de Acceso": [
+        { nombre: "Catéteres venosos periféricos 14G-24G", recomendado: 5 },
+        { nombre: "Equipos de venoclisis (macro y microgoteros)", recomendado: 2 },
+        { nombre: "Llaves de tres vías y sets de extensión", recomendado: 2 }
+      ],
+      "Equipos Adicionales": [
+        { nombre: "Monitor de glucosa (Dextrostix)", recomendado: 1 },
+        { nombre: "Bomba de infusión continua", recomendado: 1 },
+        { nombre: "Equipos para aspiración de secreciones", recomendado: 2 }
+      ]
+    };
 
+    // Mostrar categorías
+    const contenedor = document.getElementById("categorias");
+    for (let cat in categorias) {
+      const div = document.createElement("div");
+      div.className = "bg-white p-5 rounded-3xl shadow-md mb-4";
+      div.innerHTML = `<h2 class='text-base font-medium mb-4 text-gray-800'>${cat}</h2>`;
+      categorias[cat].forEach((item, index) => {
+        div.innerHTML += `
+          <div class='flex items-center mb-3'>
+            <span class='w-2/3 text-gray-700'>${item.nombre}</span>
+            <input type='number' min='0' id='${cat}-${index}' class='w-1/3 p-2 border border-gray-200 rounded-2xl focus:outline-none focus:ring-1 focus:ring-gray-300' placeholder='Cantidad' />
+          </div>
+        `;
+      });
+      contenedor.appendChild(div);
+    }
+
+    // Fecha automática
     document.getElementById("fecha-auto").value = new Date().toLocaleString();
+    const selectServicio = document.getElementById('servicio');
 
-    // --- Función para cargar datos desde Google Sheets ---
-    async function cargarDatos() {
+    // Cargar servicios desde Google Sheet
+    async function cargarServicios() {
       try {
-        const resp = await fetch(endpoint + "?accion=cargar");
+        const resp = await fetch(`${ENDPOINT}?sheet=servicios`);
         const data = await resp.json();
-
-        // Categorías / Ítems
-        categorias = data.items.reduce((acc, item) => {
-          if (!acc[item.categoria]) acc[item.categoria] = [];
-          acc[item.categoria].push({ nombre: item.nombre, recomendado: Number(item.recomendado) });
-          return acc;
-        }, {});
-
-        // Servicios
-        servicios = data.servicios.map(s => s.nombre);
-        renderServicios();
-
-        // Historial
-        historialPorServicio = data.historial.reduce((acc, h) => {
-          if (!acc[h.servicio]) acc[h.servicio] = [];
-          acc[h.servicio].push({
-            servicio: h.servicio,
-            responsable: h.responsable,
-            fecha: h.fecha,
-            porcentaje: Number(h.porcentaje),
-            faltantes: h.faltantes ? JSON.parse(h.faltantes) : [],
-            observaciones: h.observaciones
-          });
-          return acc;
-        }, {});
-
-        renderCategorias();
-      } catch (e) {
-        console.error("Error cargando datos:", e);
+        renderServicios(data);
+      } catch (err) {
+        console.error("Error cargando servicios:", err);
       }
     }
 
-    // --- Render Servicios ---
-    const selectServicio = document.getElementById("servicio");
-    function renderServicios() {
+    function renderServicios(servicios) {
       selectServicio.innerHTML = '<option value="">Seleccione un servicio</option>';
       servicios.forEach(s => {
-        const option = document.createElement("option");
+        const option = document.createElement('option');
         option.value = s;
         option.textContent = s;
         selectServicio.appendChild(option);
       });
     }
 
-    document.getElementById("agregarServicioBtn").addEventListener("click", async () => {
-      const nuevo = prompt("Ingrese el nombre del nuevo servicio:");
-      if (nuevo && !servicios.includes(nuevo)) {
-        // Guardar directamente en Sheets
+    // Agregar nuevo servicio y guardar en Sheet
+    document.getElementById('agregarServicioBtn').addEventListener('click', async () => {
+      const nuevo = prompt('Ingrese el nombre del nuevo servicio:');
+      if (nuevo) {
         try {
-          await fetch(endpoint + "?accion=agregarServicio", {
-            method: "POST",
-            body: JSON.stringify({ nombre: nuevo })
-          });
-          servicios.push(nuevo);
-          renderServicios();
-        } catch (e) {
-          console.error("Error agregando servicio:", e);
+          await fetch(`${ENDPOINT}?sheet=servicios&accion=agregar&valor=${encodeURIComponent(nuevo)}`);
+          alert("Servicio agregado correctamente.");
+          cargarServicios();
+        } catch (err) {
+          console.error("Error agregando servicio:", err);
         }
       }
     });
 
-    // --- Render Categorías ---
-    const contenedor = document.getElementById("categorias");
-    function renderCategorias() {
-      contenedor.innerHTML = "";
-      for (let cat in categorias) {
-        const div = document.createElement("div");
-        div.className = "bg-white p-5 rounded-3xl shadow-md mb-4";
-        div.innerHTML = `<h2 class='text-base font-medium mb-4 text-gray-800'>${cat}</h2>`;
-        categorias[cat].forEach((item, index) => {
-          div.innerHTML += `
-            <div class='flex items-center mb-3'>
-              <span class='w-2/3 text-gray-700'>${item.nombre}</span>
-              <input type='number' min='0' id='${cat}-${index}' class='w-1/3 p-2 border border-gray-200 rounded-2xl focus:outline-none focus:ring-1 focus:ring-gray-300' placeholder='Cantidad' />
-            </div>
-          `;
-        });
-        contenedor.appendChild(div);
-      }
-    }
-    // --- Guardar Chequeo ---
-    async function guardar() {
-      const servicio = selectServicio.value;
-      if (!servicio) { alert("Seleccione un servicio"); return; }
-      const responsable = document.getElementById("responsable").value;
-      const fechaAuto = document.getElementById("fecha-auto").value;
-      const observaciones = document.getElementById("observaciones").value;
-
-      let faltantes = [], total = 0, completos = 0;
-      for (let cat in categorias) {
-        categorias[cat].forEach((item, index) => {
-          const valor = parseInt(document.getElementById(`${cat}-${index}`).value) || 0;
-          total++;
-          if (valor >= item.recomendado) completos++; else faltantes.push(item.nombre);
-        });
-      }
-
-      let porcentaje = Math.round((completos / total) * 100);
-      let color = "bg-green-400";
-      if (faltantes.length > 0 && faltantes.length <= total / 2) color = "bg-yellow-300";
-      if (faltantes.length > total / 2) color = "bg-red-400";
-
-      // Mostrar resultado
-      document.getElementById("resultado").innerHTML = `
-        <div class='bg-white p-5 rounded-3xl shadow-md space-y-3'>
-          <h3 class='font-medium text-lg text-gray-800 mb-2'>Resultado del Chequeo</h3>
-          <p><strong>Servicio:</strong> ${servicio}</p>
-          <p><strong>Responsable:</strong> ${responsable}</p>
-          <p><strong>Fecha:</strong> ${fechaAuto}</p>
-          <p><strong>Observaciones:</strong> ${observaciones || 'Ninguna'}</p>
-          <div class='p-4 rounded-2xl text-white font-semibold text-center ${color}'>${porcentaje}% completado</div>
-          <div>
-            <h4 class='font-medium mt-4 text-gray-800'>Ítems Críticos</h4>
-            <ul class='list-disc ml-6 text-gray-700'>${faltantes.map(f => `<li>${f}</li>`).join("") || "<li>Ninguno</li>"}</ul>
-          </div>
-        </div>
-      `;
-
-      // Guardar en Sheets
+    // Historial por servicio desde Google Sheet
+    async function cargarHistorial(servicio) {
       try {
-        await fetch(endpoint + "?accion=guardarChequeo", {
-          method: "POST",
-          body: JSON.stringify({
-            servicio, responsable, fecha: fechaAuto,
-            porcentaje, faltantes: JSON.stringify(faltantes), observaciones
-          })
-        });
-        alert("Chequeo guardado correctamente.");
-        await cargarDatos(); // Recargar historial
-      } catch (e) {
-        console.error("Error guardando chequeo:", e);
-        alert("Error guardando chequeo en la hoja.");
+        const resp = await fetch(`${ENDPOINT}?sheet=historial`);
+        const data = await resp.json();
+        const filtrado = data.filter(h => h.servicio === servicio);
+        renderHistorial(filtrado);
+      } catch (err) {
+        console.error("Error cargando historial:", err);
       }
     }
 
-    // --- Render Historial ---
-    function renderHistorial(servicio) {
+    function renderHistorial(historial) {
       const histDiv = document.getElementById("historial");
       histDiv.innerHTML = "<h3 class='text-lg font-medium text-gray-800 mb-4'>Historial de Chequeos</h3>";
-      if (historialPorServicio[servicio]) {
-        historialPorServicio[servicio].forEach(h => {
-          let color = h.porcentaje === 100 ? "bg-green-400" : h.porcentaje >= 70 ? "bg-yellow-300" : "bg-red-400";
+      if (historial.length > 0) {
+        historial.forEach(h => {
+          let color = h.porcentaje == 100 ? "bg-green-400" : h.porcentaje >= 70 ? "bg-yellow-300" : "bg-red-400";
           histDiv.innerHTML += `
             <div class='bg-white p-4 rounded-3xl shadow-md flex justify-between items-center'>
               <div>
@@ -222,15 +186,44 @@
       }
     }
 
-    // --- Evento selección de servicio ---
     selectServicio.addEventListener("change", (e) => {
       const servicio = e.target.value;
-      if (servicio) renderHistorial(servicio);
+      if (servicio) cargarHistorial(servicio);
       else document.getElementById("historial").innerHTML = "";
     });
 
-    // --- Inicializar ---
-    cargarDatos();
+    // Guardar chequeo en Google Sheet
+    async function guardar() {
+      const servicio = selectServicio.value;
+      if (!servicio) { alert("Seleccione un servicio"); return; }
+      const responsable = document.getElementById("responsable").value;
+      const fechaAuto = document.getElementById("fecha-auto").value;
+      const observaciones = document.getElementById("observaciones").value;
+
+      let faltantes = [], total = 0, completos = 0;
+      for (let cat in categorias) {
+        categorias[cat].forEach((item, index) => {
+          const valor = parseInt(document.getElementById(`${cat}-${index}`).value) || 0;
+          total++;
+          if (valor >= item.recomendado) completos++; else faltantes.push(item.nombre);
+        });
+      }
+
+      const porcentaje = Math.round((completos / total) * 100);
+
+      try {
+        await fetch(`${ENDPOINT}?sheet=historial&accion=agregar&valor=${encodeURIComponent(JSON.stringify({
+          servicio, responsable, fecha: fechaAuto, porcentaje, faltantes, observaciones
+        }))}`);
+        alert("Chequeo guardado correctamente.");
+        cargarHistorial(servicio);
+      } catch (err) {
+        console.error("Error guardando historial:", err);
+      }
+    }
+
+    // Inicializar
+    cargarServicios();
   </script>
 </body>
 </html>
