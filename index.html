@@ -41,7 +41,7 @@
     </div>
 
     <!-- Botón Guardar -->
-    <button id="guardarBtn" class="w-full bg-gray-900 hover:bg-gray-800 text-white font-medium py-3 rounded-3xl transition">Guardar Chequeo</button>
+    <button onclick="guardar()" class="w-full bg-gray-900 hover:bg-gray-800 text-white font-medium py-3 rounded-3xl transition">Guardar Chequeo</button>
 
     <!-- Resultados -->
     <div id="resultado" class="mt-6 space-y-3"></div>
@@ -51,19 +51,50 @@
   </div>
 
   <script>
-    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbx3EbqZs66jFKPxiC4nMRWZSTGTaXFMZ8Co0PFNZvPaYIMq7pTQUthSkjAm0hIpRXU/exec";
-
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx3EbqZs66jFKPxiC4nMRWZSTGTaXFMZ8Co0PFNZvPaYIMq7pTQUthSkjAm0hIpRXU/exec";
     let categorias = {};
     let servicios = [];
     let historialPorServicio = {};
 
-    // Fecha automática
     document.getElementById("fecha-auto").value = new Date().toLocaleString();
 
-    // Función para renderizar servicios
+    // Función para cargar todo desde Google Sheet
+    async function cargarDatos() {
+      try {
+        const response = await fetch(SCRIPT_URL);
+        const data = await response.json();
+
+        categorias = {};
+        data.items.forEach(item => {
+          if (!categorias[item.categoria]) categorias[item.categoria] = [];
+          categorias[item.categoria].push({ nombre: item.nombre, recomendado: parseInt(item.recomendado) });
+        });
+
+        servicios = data.servicios;
+        historialPorServicio = {};
+        data.historial.forEach(h => {
+          if (!historialPorServicio[h.servicio]) historialPorServicio[h.servicio] = [];
+          historialPorServicio[h.servicio].push({
+            fecha: h.fecha,
+            servicio: h.servicio,
+            responsable: h.responsable,
+            porcentaje: parseInt(h.porcentaje),
+            faltantes: h.faltantes ? h.faltantes.split(", ") : [],
+            observaciones: h.observaciones
+          });
+        });
+
+        renderServicios();
+        renderCategorias();
+      } catch (err) {
+        console.error("Error cargando datos:", err);
+        alert("Error al cargar los datos desde la nube.");
+      }
+    }
+
     function renderServicios() {
       const selectServicio = document.getElementById("servicio");
-      selectServicio.innerHTML = "<option value=''>Seleccione un servicio</option>";
+      selectServicio.innerHTML = '<option value="">Seleccione un servicio</option>';
       servicios.forEach(s => {
         const option = document.createElement("option");
         option.value = s;
@@ -72,7 +103,6 @@
       });
     }
 
-    // Función para renderizar categorías y items
     function renderCategorias() {
       const contenedor = document.getElementById("categorias");
       contenedor.innerHTML = "";
@@ -91,8 +121,91 @@
         contenedor.appendChild(div);
       }
     }
+    // Agregar servicio nuevo
+    document.getElementById("agregarServicioBtn").addEventListener("click", async () => {
+      const nuevo = prompt("Ingrese el nombre del nuevo servicio:");
+      if (!nuevo) return;
+      if (servicios.includes(nuevo)) {
+        alert("El servicio ya existe.");
+        return;
+      }
 
-    // Función para renderizar historial
+      // Guardar en Google Sheet vía POST
+      try {
+        const payload = {
+          fecha: new Date().toLocaleString(),
+          servicio: nuevo,
+          responsable: "N/A",
+          porcentaje: 0,
+          faltantes: [],
+          observaciones: ""
+        };
+        await fetch(SCRIPT_URL, {
+          method: "POST",
+          body: JSON.stringify(payload)
+        });
+        servicios.push(nuevo);
+        renderServicios();
+        alert("Servicio agregado correctamente.");
+      } catch (err) {
+        console.error("Error agregando servicio:", err);
+        alert("No se pudo agregar el servicio a la nube.");
+      }
+    });
+
+    async function guardar() {
+      const servicio = document.getElementById("servicio").value;
+      if (!servicio) { alert("Seleccione un servicio"); return; }
+      const responsable = document.getElementById("responsable").value;
+      const fechaAuto = document.getElementById("fecha-auto").value;
+      const observaciones = document.getElementById("observaciones").value;
+
+      let faltantes = [], total = 0, completos = 0;
+      for (let cat in categorias) {
+        categorias[cat].forEach((item, index) => {
+          const valor = parseInt(document.getElementById(`${cat}-${index}`).value) || 0;
+          total++;
+          if (valor >= item.recomendado) completos++; else faltantes.push(item.nombre);
+        });
+      }
+
+      const porcentaje = Math.round((completos / total) * 100);
+
+      let color = "bg-green-400";
+      if (faltantes.length > 0 && faltantes.length <= total / 2) color = "bg-yellow-300";
+      if (faltantes.length > total / 2) color = "bg-red-400";
+
+      const resultadoHtml = `<div class='bg-white p-5 rounded-3xl shadow-md space-y-3'>
+        <h3 class='font-medium text-lg text-gray-800 mb-2'>Resultado del Chequeo</h3>
+        <p><strong>Servicio:</strong> ${servicio}</p>
+        <p><strong>Responsable:</strong> ${responsable}</p>
+        <p><strong>Fecha:</strong> ${fechaAuto}</p>
+        <p><strong>Observaciones:</strong> ${observaciones || 'Ninguna'}</p>
+        <div class='p-4 rounded-2xl text-white font-semibold text-center ${color}'>${porcentaje}% completado</div>
+        <div>
+          <h4 class='font-medium mt-4 text-gray-800'>Ítems Críticos</h4>
+          <ul class='list-disc ml-6 text-gray-700'>${faltantes.map(f => `<li>${f}</li>`).join("") || "<li>Ninguno</li>"}</ul>
+        </div>
+      </div>`;
+      document.getElementById("resultado").innerHTML = resultadoHtml;
+
+      // Guardar en Google Sheet vía POST
+      try {
+        const payload = { fecha: fechaAuto, servicio, responsable, porcentaje, faltantes, observaciones };
+        await fetch(SCRIPT_URL, {
+          method: "POST",
+          body: JSON.stringify(payload)
+        });
+
+        if (!historialPorServicio[servicio]) historialPorServicio[servicio] = [];
+        historialPorServicio[servicio].push({ fecha: fechaAuto, servicio, responsable, porcentaje, faltantes, observaciones });
+        renderHistorial(servicio);
+      } catch (err) {
+        console.error("Error guardando historial:", err);
+        alert("No se pudo guardar el chequeo en la nube.");
+      }
+    }
+
     function renderHistorial(servicio) {
       const histDiv = document.getElementById("historial");
       histDiv.innerHTML = "<h3 class='text-lg font-medium text-gray-800 mb-4'>Historial de Chequeos</h3>";
@@ -115,125 +228,14 @@
       }
     }
 
-    // Fetch inicial desde Google Sheets
-    async function cargarDatos() {
-      try {
-        const res = await fetch(WEB_APP_URL);
-        const data = await res.json();
-        categorias = {};
-        data.items.forEach(i => {
-          if (!categorias[i.categoria]) categorias[i.categoria] = [];
-          categorias[i.categoria].push({nombre: i.nombre, recomendado: parseInt(i.recomendado)});
-        });
-        servicios = data.servicios;
-        historialPorServicio = {};
-        data.historial.forEach(h => {
-          if (!historialPorServicio[h.servicio]) historialPorServicio[h.servicio] = [];
-          historialPorServicio[h.servicio].push({
-            fecha: h.fecha,
-            servicio: h.servicio,
-            responsable: h.responsable,
-            porcentaje: h.porcentaje,
-            faltantes: h.faltantes.split(",").map(x=>x.trim()),
-            observaciones: h.observaciones
-          });
-        });
-        renderServicios();
-        renderCategorias();
-      } catch(err) {
-        console.error("Error cargando datos:", err);
-      }
-    }
-
-    cargarDatos();
-
-    // Cambios de servicio
-    document.getElementById("servicio").addEventListener("change", e => {
+    document.getElementById("servicio").addEventListener("change", (e) => {
       const servicio = e.target.value;
       if (servicio) renderHistorial(servicio);
       else document.getElementById("historial").innerHTML = "";
     });
 
-    // Agregar servicio
-    document.getElementById("agregarServicioBtn").addEventListener("click", async () => {
-      const nuevo = prompt("Ingrese el nombre del nuevo servicio:");
-      if (nuevo && !servicios.includes(nuevo)) {
-        try {
-          await fetch(WEB_APP_URL, {
-            method: "POST",
-            body: JSON.stringify({
-              servicio: nuevo,
-              responsable: "",
-              fecha: new Date().toLocaleString(),
-              porcentaje: 0,
-              faltantes: [],
-              observaciones: ""
-            })
-          });
-          alert("Servicio agregado correctamente. Recargue la página.");
-        } catch(err) {
-          console.error(err);
-          alert("Error agregando servicio.");    // Guardar chequeo
-    async function guardar() {
-      const servicio = selectServicio.value;
-      if (!servicio) { alert("Seleccione un servicio"); return; }
-      const responsable = document.getElementById("responsable").value;
-      const fechaAuto = document.getElementById("fecha-auto").value;
-      const observaciones = document.getElementById("observaciones").value;
-
-      let faltantes = [], total = 0, completos = 0;
-      for (let cat in categorias) {
-        categorias[cat].forEach((item, index) => {
-          const valor = parseInt(document.getElementById(`${cat}-${index}`).value) || 0;
-          total++;
-          if (valor >= item.recomendado) completos++; else faltantes.push(item.nombre);
-        });
-      }
-
-      let porcentaje = Math.round((completos / total) * 100);
-
-      let color = "bg-green-400";
-      if (faltantes.length > 0 && faltantes.length <= total / 2) color = "bg-yellow-300";
-      if (faltantes.length > total / 2) color = "bg-red-400";
-
-      // Mostrar resultado
-      let html = `<div class='bg-white p-5 rounded-3xl shadow-md space-y-3'>
-        <h3 class='font-medium text-lg text-gray-800 mb-2'>Resultado del Chequeo</h3>
-        <p><strong>Servicio:</strong> ${servicio}</p>
-        <p><strong>Responsable:</strong> ${responsable}</p>
-        <p><strong>Fecha:</strong> ${fechaAuto}</p>
-        <p><strong>Observaciones:</strong> ${observaciones || 'Ninguna'}</p>
-        <div class='p-4 rounded-2xl text-white font-semibold text-center ${color}'>${porcentaje}% completado</div>
-        <div>
-          <h4 class='font-medium mt-4 text-gray-800'>Ítems Críticos</h4>
-          <ul class='list-disc ml-6 text-gray-700'>${faltantes.map(f => `<li>${f}</li>`).join("") || "<li>Ninguno</li>"}</ul>
-        </div>
-      </div>`;
-      document.getElementById("resultado").innerHTML = html;
-
-      // Guardar en Google Sheets
-      try {
-        const res = await fetch(WEB_APP_URL, {
-          method: "POST",
-          body: JSON.stringify({ servicio, responsable, fecha: fechaAuto, faltantes, porcentaje, observaciones }),
-          headers: { "Content-Type": "application/json" }
-        });
-        const data = await res.json();
-        if (data.status === "ok") {
-          alert("Chequeo guardado correctamente en la nube");
-          cargarServicios(); // recarga servicios y historial
-        } else {
-          alert("Error guardando en la nube");
-        }
-      } catch (err) {
-        console.error("Error guardando:", err);
-        alert("Error guardando en la nube");
-      }
-    }
+    // Cargar datos al iniciar
+    cargarDatos();
   </script>
 </body>
 </html>
-
-        }
-      }
-    });
